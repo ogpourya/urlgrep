@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "urlgrep"
 version = "1.0.0"
@@ -8,3 +12,6 @@ dependencies = [
     "aiohttp>=3.13.3",
     "uvloop>=0.22.1",
 ]
+
+[project.scripts]
+urlgrep = "urlgrep:run"

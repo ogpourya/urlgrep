@@ -11,7 +11,7 @@ uv tool install https://github.com/ogpourya/urlgrep.git
 ## Usage
 
 ```bash
-cat urls.txt | urlgrep "pattern" [options] | sort -u
+cat urls.txt | urlgrep "pattern" [options]
 ```
 
 ## Options

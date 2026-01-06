@@ -135,10 +135,13 @@ async def main():
         except asyncio.CancelledError:
             pass
 
-if __name__ == "__main__":
+def run():
     uvloop.install()
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         os._exit(0)
+
+if __name__ == "__main__":
+    run()
