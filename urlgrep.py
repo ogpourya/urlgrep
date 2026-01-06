@@ -89,7 +89,11 @@ async def reader(queue, loop):
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     
     async for line in reader_stream:
-        line = line.decode('utf-8').strip()
+        try:
+            line = line.decode('utf-8', errors='replace').strip()
+        except Exception:
+            continue
+
         if not line:
             continue
             
@@ -108,6 +112,18 @@ async def main():
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug output")
     
     args = parser.parse_args()
+
+    # Check for optimal DNS resolution
+    try:
+        import aiodns
+    except ImportError:
+        if args.workers > 20:
+            sys.stderr.write(
+                f"\033[93mWarning: Running {args.workers} workers without 'aiodns' installed.\n"
+                "DNS resolution will be slow and thread-blocking.\n"
+                "Install it with: pip install aiodns\033[0m\n"
+            )
+            sys.stderr.flush()
     
     try:
         regex = re.compile(args.pattern.encode('utf-8'))
@@ -136,6 +152,10 @@ async def main():
             pass
 
 def run():
+    # Increase thread pool for DNS/disk operations if aiodns is missing
+    # 1024 is usually the libuv max
+    if "UV_THREADPOOL_SIZE" not in os.environ:
+        os.environ["UV_THREADPOOL_SIZE"] = "1024"
     uvloop.install()
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
     try:
