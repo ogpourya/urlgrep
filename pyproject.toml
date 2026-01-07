@@ -4,13 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "urlgrep"
-version = "1.0.2"
+version = "1.0.3"
 description = ""
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.13.3",
-    "uvloop>=0.22.1",
     "aiodns>=3.2.0",
 ]
 

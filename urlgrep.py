@@ -9,7 +9,6 @@ try:
     import argparse
     import asyncio
     import re
-    import uvloop
     import aiohttp
 except KeyboardInterrupt:
     os._exit(0)
@@ -156,7 +155,6 @@ def run():
     # 1024 is usually the libuv max
     if "UV_THREADPOOL_SIZE" not in os.environ:
         os.environ["UV_THREADPOOL_SIZE"] = "1024"
-    uvloop.install()
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
     try:
         asyncio.run(main())
