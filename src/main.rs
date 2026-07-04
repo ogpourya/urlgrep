@@ -1,3 +1,5 @@
+mod scripts;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,8 +24,8 @@ const BUF_OVERLAP: usize = 4096;
 #[derive(Parser, Clone)]
 #[command(version, about = "Chrome-fingerprinted async URL grepper")]
 struct Args {
-    #[arg(short = 's', long, help = "JavaScript match function (file path or inline code)")]
-    script: String,
+    #[arg(short = 's', long, help = "JavaScript match function (file path, inline code, or @tag)")]
+    script: Option<String>,
 
     #[arg(short = 't', long, default_value = "3.0")]
     timeout: f64,
@@ -51,6 +53,8 @@ struct Args {
     proxy: Option<String>,
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     prefer_https: bool,
+    #[arg(long)]
+    list_tags: bool,
 }
 
 fn build_client(args: &Args) -> Result<Client, Box<dyn std::error::Error>> {
@@ -151,9 +155,16 @@ struct JsMatch {
 
 impl JsMatch {
     fn new(script: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let source = match std::fs::read_to_string(script) {
-            Ok(s) => s,
-            Err(_) => script.to_string(),
+        let source = if let Some(tag) = script.strip_prefix('@') {
+            match scripts::find(tag) {
+                Some(s) => s.code,
+                None => return Err(format!("unknown builtin tag: @{tag}").into()),
+            }
+        } else {
+            match std::fs::read_to_string(script) {
+                Ok(s) => s,
+                Err(_) => script.to_string(),
+            }
         };
 
         let rt = Runtime::new()?;
@@ -320,6 +331,15 @@ async fn process_response(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Arc::new(Args::parse());
 
+    if args.list_tags {
+        for (tag, desc) in scripts::list() {
+            println!("  @{tag:<16} {desc}");
+        }
+        return Ok(());
+    }
+
+    let script = args.script.as_ref().ok_or("--script is required")?;
+
     {
         let args = args.clone();
         tokio::spawn(async move {
@@ -330,7 +350,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let client = Arc::new(build_client(&args)?);
-    let jsmatch = Arc::new(JsMatch::new(&args.script)?);
+    let jsmatch = Arc::new(JsMatch::new(script)?);
     let method = match Method::from_bytes(args.method.to_uppercase().as_bytes()) {
         Ok(m) => m,
         Err(_) => {
