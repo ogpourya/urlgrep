@@ -22,7 +22,7 @@ const BUF_OVERLAP: usize = 4096;
 #[derive(Parser, Clone)]
 #[command(version, about = "Chrome-fingerprinted async URL grepper")]
 struct Args {
-    #[arg(short = 's', long)]
+    #[arg(short = 's', long, help = "JavaScript match function (file path or inline code)")]
     script: String,
 
     #[arg(short = 't', long, default_value = "3.0")]
@@ -150,8 +150,12 @@ struct JsMatch {
 }
 
 impl JsMatch {
-    fn new(script_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let source = std::fs::read_to_string(script_path)?;
+    fn new(script: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let source = match std::fs::read_to_string(script) {
+            Ok(s) => s,
+            Err(_) => script.to_string(),
+        };
+
         let rt = Runtime::new()?;
 
         let ctx = Context::full(&rt)?;
