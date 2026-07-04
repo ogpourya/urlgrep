@@ -221,7 +221,11 @@ async fn fetch_and_scan(
     if args.debug {
         eprintln!("[request] {url}");
     }
-    for attempt in 0..=args.retry {
+
+    let idempotent = *method == Method::GET || *method == Method::HEAD;
+    let max_attempts = if idempotent { args.retry } else { 0 };
+
+    for attempt in 0..=max_attempts {
         match do_request(client, url, method, headers, req_body).await {
             Ok(resp) => {
                 match process_response(resp, jsmatch, url, args.debug).await {
@@ -246,19 +250,23 @@ async fn fetch_and_scan(
                     }
                 }
             }
-            Err(e) if attempt < args.retry => {
+            Err(e) if attempt < max_attempts => {
                 if args.debug {
                     eprintln!(
                         "[error] {url}: {e} (attempt {}/{}, retrying)",
                         attempt + 1,
-                        args.retry
+                        max_attempts
                     );
                 }
                 tokio::time::sleep(Duration::from_millis(100 * (attempt as u64 + 1))).await;
             }
             Err(e) => {
                 if args.debug {
-                    eprintln!("[error] {url}: {e} (all {}/{}, exhausted)", attempt + 1, args.retry);
+                    if max_attempts > 0 {
+                        eprintln!("[error] {url}: {e} (all {}/{}, exhausted)", attempt + 1, max_attempts);
+                    } else {
+                        eprintln!("[error] {url}: {e}");
+                    }
                 }
                 return;
             }
@@ -274,6 +282,13 @@ async fn process_response(
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let status = resp.status().as_u16();
 
+    if !resp.status().is_success() {
+        if debug {
+            eprintln!("[status] {url}: {}", resp.status());
+        }
+        return Ok(false);
+    }
+
     let resp_headers: String = resp
         .headers()
         .iter()
@@ -282,13 +297,6 @@ async fn process_response(
             let _ = write!(acc, "{}: {}\n", k.as_str(), v.to_str().unwrap_or(""));
             acc
         });
-
-    if !resp.status().is_success() {
-        if debug {
-            eprintln!("[status] {url}: {}", resp.status());
-        }
-        return Ok(false);
-    }
 
     let mut buf = BytesMut::with_capacity(BUF_CAP);
     let mut stream = resp.bytes_stream();
