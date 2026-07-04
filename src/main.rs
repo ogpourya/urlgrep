@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::BytesMut;
@@ -145,8 +145,7 @@ fn normalize_urls(line: &str, prefer_https: bool, debug: bool) -> Vec<String> {
 }
 
 struct JsMatch {
-    rt: Runtime,
-    source: String,
+    ctx: Mutex<Context>,
 }
 
 impl JsMatch {
@@ -169,22 +168,16 @@ impl JsMatch {
             Ok(())
         })?;
 
-        Ok(Self { rt, source })
+        Ok(Self { ctx: Mutex::new(ctx) })
     }
 
     fn check(&self, url: &str, body: &str, status: u16, resp_headers: &str, debug: bool) -> bool {
-        let ctx = match Context::full(&self.rt) {
-            Ok(c) => c,
-            Err(e) => {
-                if debug {
-                    eprintln!("[js-error] {url}: failed to create context: {e}");
-                }
-                return false;
-            }
+        let ctx = match self.ctx.lock() {
+            Ok(g) => g,
+            Err(_) => return false,
         };
 
         let result: Result<bool, Box<dyn std::error::Error>> = ctx.with(|ctx| {
-            ctx.eval::<(), _>(self.source.as_str())?;
             let f: Function = ctx.globals().get("match")?;
             let matched: bool = f.call((url, body, status, resp_headers))?;
             Ok(matched)
@@ -354,34 +347,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     stream
-        .for_each_concurrent(args.workers, {
-            let client = client.clone();
-            let jsmatch = jsmatch.clone();
-            let args = args.clone();
+        .for_each_concurrent(args.workers, |url: String| {
+            let client = Arc::clone(&client);
+            let jsmatch = Arc::clone(&jsmatch);
+            let args = Arc::clone(&args);
             let method = method.clone();
-            let custom_headers = custom_headers.clone();
-            let body_data = body_data.clone();
+            let custom_headers = Arc::clone(&custom_headers);
+            let body_data = Arc::clone(&body_data);
 
-            move |url: String| {
-                let client = client.clone();
-                let jsmatch = jsmatch.clone();
-                let args = args.clone();
-                let method = method.clone();
-                let custom_headers = custom_headers.clone();
-                let body_data = body_data.clone();
-
-                async move {
-                    fetch_and_scan(
-                        &client,
-                        &jsmatch,
-                        &url,
-                        &method,
-                        &custom_headers,
-                        &body_data,
-                        &args,
-                    )
-                    .await;
-                }
+            async move {
+                fetch_and_scan(
+                    &client,
+                    &jsmatch,
+                    &url,
+                    &method,
+                    &custom_headers,
+                    &body_data,
+                    &args,
+                )
+                .await;
             }
         })
         .await;
