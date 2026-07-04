@@ -6,7 +6,7 @@ description = "Chrome-fingerprinted async URL grepper"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "io-util", "io-std", "signal", "sync", "macros"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream", "gzip", "brotli"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream", "gzip", "brotli", "socks"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
 rquickjs = { version = "0.9", features = ["full"] }
 bytes = "1"
