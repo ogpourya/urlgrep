@@ -237,9 +237,10 @@ async fn fetch_and_scan(
     }
 
     let idempotent = *method == Method::GET || *method == Method::HEAD;
-    let max_attempts = if idempotent { args.retry } else { 0 };
+    let max_retries = if idempotent { args.retry } else { 0 };
+    let total = max_retries + 1;
 
-    for attempt in 0..=max_attempts {
+    for attempt in 0..=max_retries {
         match do_request(client, url, method, headers, req_body).await {
             Ok(resp) => {
                 match process_response(resp, jsmatch, url, args.debug).await {
@@ -264,20 +265,20 @@ async fn fetch_and_scan(
                     }
                 }
             }
-            Err(e) if attempt < max_attempts => {
+            Err(e) if attempt < max_retries => {
                 if args.debug {
                     eprintln!(
                         "[error] {url}: {e} (attempt {}/{}, retrying)",
                         attempt + 1,
-                        max_attempts
+                        total
                     );
                 }
                 tokio::time::sleep(Duration::from_millis(100 * (attempt as u64 + 1))).await;
             }
             Err(e) => {
                 if args.debug {
-                    if max_attempts > 0 {
-                        eprintln!("[error] {url}: {e} (all {}/{}, exhausted)", attempt + 1, max_attempts);
+                    if max_retries > 0 {
+                        eprintln!("[error] {url}: {e} (all {total} attempts exhausted)");
                     } else {
                         eprintln!("[error] {url}: {e}");
                     }
