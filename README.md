@@ -29,9 +29,9 @@ function match(url, body, status, headers) {
 | Argument | Type | Description |
 |----------|------|-------------|
 | `url` | string | Full URL being fetched |
-| `body` | string | Response body (up to 1MB) |
+| `body` | string | Response body (first 1MB) |
 | `status` | number | HTTP status code |
-| `headers` | string | Response headers as `Name: value\n` |
+| `headers` | string | Response headers as `Name: value\n` lines |
 
 Return `true` to print the URL.
 
@@ -50,7 +50,7 @@ urlgrep -s 'function match(u,b,s,h){return b.includes("admin")}' < urls.txt
 | `-s, --script SRC` | — | Matcher: file path or inline JS |
 | `-w, --workers N` | 10 | Max concurrency |
 | `-t, --timeout SEC` | 3.0 | Request timeout |
-| `-r, --retry N` | 3 | Max retries |
+| `-r, --retry N` | 3 | Max retries (GET/HEAD only) |
 | `-d, --debug` | — | Diagnostics to stderr |
 | `-X, --method M` | GET | HTTP method |
 | `-H, --header "K: V"` | — | Custom header (repeatable) |
@@ -61,7 +61,9 @@ urlgrep -s 'function match(u,b,s,h){return b.includes("admin")}' < urls.txt
 | `-p, --proxy URL` | — | Proxy |
 | `--prefer-https BOOL` | true | Try https first for bare domains |
 
-Bare domains (no `http://`/`https://`) expand to both schemes.
+Bare domains (no `http://`/`https://`) expand to both schemes. Non-GET methods
+(POST/PUT/DELETE) are not retried to avoid duplicate side effects. Response
+bodies are capped at 1MB — only the first 1MB is passed to the matcher.
 
 ## Examples
 

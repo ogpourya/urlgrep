@@ -17,7 +17,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 const CHROME_UA: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 const BUF_CAP: usize = 1048576;
-const BUF_OVERLAP: usize = 4096;
 
 #[derive(Parser, Clone)]
 #[command(version, about = "Chrome-fingerprinted async URL grepper")]
@@ -318,14 +317,13 @@ async fn process_response(
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
-        let chunk_len = chunk.len();
 
-        if buf.len() + chunk_len > BUF_CAP {
-            let keep = std::cmp::min(buf.len(), BUF_OVERLAP);
-            let _ = buf.split_to(buf.len() - keep);
+        let space_left = BUF_CAP.saturating_sub(buf.len());
+        if space_left == 0 {
+            break;
         }
-
-        buf.extend_from_slice(&chunk);
+        let take = std::cmp::min(chunk.len(), space_left);
+        buf.extend_from_slice(&chunk[..take]);
     }
 
     let body = String::from_utf8_lossy(&buf);
