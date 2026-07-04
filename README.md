@@ -1,7 +1,7 @@
 # urlgrep
 
-Streams URLs from stdin, fetches them concurrently, and outputs only those whose responses match a regex.
-Uses the full Chrome TLS/HTTP2 fingerprint to avoid blocking.
+Stream URLs from stdin, fetch concurrently, output matches via a JavaScript
+matcher. Chrome TLS/HTTP2 fingerprint.
 
 ## Install
 
@@ -9,46 +9,62 @@ Uses the full Chrome TLS/HTTP2 fingerprint to avoid blocking.
 cargo install --git https://github.com/ogpourya/urlgrep.git
 ```
 
-Or build from source:
-
-```bash
-git clone https://github.com/ogpourya/urlgrep.git
-cd urlgrep
-cargo build --release
-cp target/release/urlgrep ~/.local/bin/
-```
-
 ## Usage
 
 ```bash
-cat urls.txt | urlgrep "pattern" [options]
+cat urls.txt | urlgrep --script match.js [options]
 ```
+
+## Matcher (QuickJS)
+
+The script must export a `match` function:
+
+```javascript
+// match.js
+function match(url, body, status, headers) {
+    return body.includes("admin");
+}
+```
+
+Arguments: `url` (string), `body` (string, up to 1MB), `status` (number),
+`headers` (string, `Name: value\n` lines). Return `true` to print the URL.
 
 ## Options
 
-- `pattern`: Regex to match
-- `-w, --workers`: Max concurrency (default 10)
-- `-t, --timeout`: Request timeout in seconds (default 3.0)
-- `-p, --proxy`: Proxy URL (e.g. `http://127.0.0.1:8080`)
-- `-r, --retry`: Max retries (default 3)
-- `-d, --debug`: Show matching context in stderr (highlighted)
-- `--insecure`: Skip TLS certificate validation
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-s, --script PATH` | — | JS matcher (required) |
+| `-w, --workers N` | 10 | Max concurrency |
+| `-t, --timeout SEC` | 3.0 | Request timeout |
+| `-r, --retry N` | 3 | Max retries |
+| `-d, --debug` | — | Diagnostics to stderr |
+| `-X, --method M` | GET | HTTP method |
+| `-H, --header "K: V"` | — | Custom header (repeatable) |
+| `--data STR` | — | Request body |
+| `-L, --follow-redirects` | — | Follow redirects |
+| `-A, --user-agent UA` | Chrome 126 | User-Agent |
+| `-k, --insecure` | — | Skip TLS verify |
+| `-p, --proxy URL` | — | Proxy |
+| `--prefer-https BOOL` | true | Try https first for bare domains |
 
-## Chrome Fingerprint
+Bare domains (no `http://`/`https://`) expand to both schemes.
 
-Requests are crafted to mimic Google Chrome 126:
+## Examples
 
-- **TLS**: rustls with Chrome-aligned cipher suites via reqwest
-- **HTTP/2**: Adaptive window, nodelay, keepalive
-- **Headers**: Full Sec-Ch-Ua, Sec-Fetch-*, Priority, and standard Accept/
-  Accept-Language/Accept-Encoding matching Chrome defaults
+```bash
+# Basic grep
+echo "example.com" | urlgrep -s match.js
 
-## Performance
+# 200 workers, follow redirects, skip SSL
+cat millions.txt | urlgrep -s match.js -w 200 -L -k
 
-- Written in Rust — compiled, no interpreter overhead
-- **mimalloc** global allocator — fast concurrent allocation
-- **tokio** multi-thread async runtime
-- **BytesMut** sliding-window scanner (32KB cap, 4KB overlap)
-- **reqwest** connection pool with keepalive
-- LTO + `codegen-units=1` + `target-cpu=native` in release builds
-- **Note**: Output is streamed as found. Pipe to `sort -u` for unique results.
+# POST JSON, custom header
+echo "api.example.com" | urlgrep -s match.js -X POST \
+  --data '{}' -H "Content-Type: application/json"
+
+# HTTP-first for bare domains
+echo "neverssl.com" | urlgrep -s match.js --prefer-https false
+
+# Debug mode shows request lifecycle
+echo "example.com" | urlgrep -s match.js -d
+```
