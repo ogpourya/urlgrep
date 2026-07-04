@@ -17,13 +17,22 @@ cat urls.txt | urlgrep --script match.js [options]
 
 ## Matcher (QuickJS)
 
-The script must export a `match` function:
+The `-s` flag accepts a file path or inline JS code. The code must define a
+`match` function:
 
 ```javascript
-// match.js
+// file: match.js
 function match(url, body, status, headers) {
     return body.includes("admin");
 }
+```
+
+```bash
+# file
+urlgrep -s match.js < urls.txt
+
+# inline
+urlgrep -s 'function match(u,b,s,h){return b.includes("admin")}' < urls.txt
 ```
 
 Arguments: `url` (string), `body` (string, up to 1MB), `status` (number),
@@ -52,8 +61,14 @@ Bare domains (no `http://`/`https://`) expand to both schemes.
 ## Examples
 
 ```bash
-# Basic grep
+# Basic (file)
 echo "example.com" | urlgrep -s match.js
+
+# Basic (inline)
+echo "example.com" | urlgrep -s 'function match(u,b,s,h){return b.includes("html")}'
+
+# 200 workers, follow redirects, skip SSL
+cat millions.txt | urlgrep -s match.js -w 200 -L -k
 
 # 200 workers, follow redirects, skip SSL
 cat millions.txt | urlgrep -s match.js -w 200 -L -k
