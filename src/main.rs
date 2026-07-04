@@ -150,9 +150,24 @@ struct JsMatch {
 
 impl JsMatch {
     fn new(script: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let source = match std::fs::read_to_string(script) {
-            Ok(s) => s,
-            Err(_) => script.to_string(),
+        let looks_like_inline = script.contains("function") || script.contains("=>") || script.contains('\n');
+        let source = if looks_like_inline {
+            script.to_string()
+        } else {
+            match std::fs::read_to_string(script) {
+                Ok(s) => s,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        if script.contains(' ') || script.contains('(') || script.contains('{') {
+                            script.to_string()
+                        } else {
+                            return Err(format!("file not found: {script}").into());
+                        }
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            }
         };
 
         let rt = Runtime::new()?;
@@ -332,13 +347,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Arc::new(build_client(&args)?);
     let jsmatch = Arc::new(JsMatch::new(&args.script)?);
-    let method = match Method::from_bytes(args.method.to_uppercase().as_bytes()) {
-        Ok(m) => m,
-        Err(_) => {
-            eprintln!("warning: invalid method '{}', falling back to GET", args.method);
-            Method::GET
-        }
-    };
+    let method = Method::from_bytes(args.method.to_uppercase().as_bytes())
+        .unwrap_or(Method::GET);
     let custom_headers = Arc::new(parse_custom_headers(&args.headers)?);
     let body_data = Arc::new(args.data.as_deref().unwrap_or("").as_bytes().to_vec());
 
